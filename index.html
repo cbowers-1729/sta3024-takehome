@@ -80,7 +80,7 @@ dl{margin:8px 0 0}dt{font-weight:600;margin-top:8px}dd{margin:0;color:var(--mute
 (function (root) {
   'use strict';
 
-  function cleanId(id) { return String(id == null ? '' : id).replace(/[^0-9A-Za-z]/g, '').toUpperCase(); }
+  function cleanId(id) { return String(id == null ? '' : id).replace(/[^0-9A-Za-z]/g, '').toUpperCase().replace(/^0+/, ''); }   // leading zeros never matter
   function cleanCode(code) { return String(code == null ? '' : code).trim().toLowerCase().replace(/\s+/g, ' '); }
 
   // cyrb128: four 32-bit words from a string.
@@ -172,7 +172,7 @@ dl{margin:8px 0 0}dt{font-weight:600;margin-top:8px}dd{margin:0;color:var(--mute
     if(!WellnessGen.cleanId(id)){ showErr('Enter your student ID.'); return; }
     if(!WellnessGen.cleanCode(code)){ showErr('Enter the exam code announced in class.'); return; }
     try { current = WellnessGen.generate(id, code); } catch(e){ showErr(e.message); return; }
-    $('outId').textContent = current.id;
+    $('outId').textContent = id.trim();
     $('outN').textContent = current.n;
     $('outX0').textContent = current.x0;
     $('outCheck').textContent = current.check;

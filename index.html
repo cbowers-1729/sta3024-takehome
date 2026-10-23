@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STA-3024 Take-Home Dataset</title>
+<style>
+:root{--bg:#f6f7f5;--card:#fff;--ink:#1b2321;--mute:#58655f;--line:#d8dedb;--acc:#0f6b5c;--acc-ink:#fff;--warn:#8a4b00;--warn-bg:#fff4e0;--ok-bg:#e6f3ef}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151a18;--card:#1e2522;--ink:#e8eeeb;--mute:#9db0a8;--line:#33403b;--acc:#4fb8a3;--acc-ink:#0b1210;--warn:#ffc27a;--warn-bg:#3a2a12;--ok-bg:#1b302a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:28px 16px 56px}
+h1{font-size:1.5rem;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 20px;margin-bottom:16px}
+label{display:block;font-weight:600;margin:12px 0 4px}
+input[type=text]{width:100%;padding:10px 12px;font-size:1rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+input[type=text]:focus{outline:2px solid var(--acc);outline-offset:1px}
+button{margin-top:16px;padding:11px 18px;font-size:1rem;font-weight:600;border:0;border-radius:8px;background:var(--acc);color:var(--acc-ink);cursor:pointer}
+button.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.err{margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn);display:none}
+table.facts{border-collapse:collapse;width:100%;margin-top:6px}
+table.facts td{padding:7px 8px;border-bottom:1px solid var(--line)}
+table.facts td:first-child{color:var(--mute);width:48%}
+.big{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}
+.note{background:var(--ok-bg);border-radius:8px;padding:10px 12px;margin-top:14px}
+table.prev{border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums;font-size:.92rem}
+table.prev th,table.prev td{padding:4px 10px;border-bottom:1px solid var(--line);text-align:left}
+dl{margin:8px 0 0}dt{font-weight:600;margin-top:8px}dd{margin:0;color:var(--mute)}
+#prevWrap{overflow-x:auto}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>Take-Home Dataset</h1>
+  <p class="sub">STA-3024 Intermediate Statistics, Community Wellness Program</p>
+
+  <div class="card">
+    <label for="sid">Student ID</label>
+    <input type="text" id="sid" autocomplete="off" inputmode="text">
+    <label for="code">Exam code</label>
+    <input type="text" id="code" autocomplete="off">
+    <button id="go" type="button">Get my dataset</button>
+    <div class="err" id="err" role="alert"></div>
+  </div>
+
+  <div class="card hidden" id="result">
+    <h2 style="margin:0 0 4px;font-size:1.15rem">Your dataset</h2>
+    <p class="sub" style="margin:0">Generated for ID <b id="outId"></b>. If that is not your ID, go back and fix it before you start.</p>
+    <table class="facts">
+      <tr><td>Number of rows (n)</td><td class="big" id="outN"></td></tr>
+      <tr><td>Predict at Sessions =</td><td class="big" id="outX0"></td></tr>
+      <tr><td>Check code</td><td class="big" id="outCheck"></td></tr>
+    </table>
+    <div class="note">Enter the check code and the number of rows in the Canvas quiz. They tell me you loaded the right file.</div>
+    <button id="dl" type="button">Download CSV</button>
+    <button id="pv" type="button" class="alt">Show first rows</button>
+    <div id="prevWrap" class="hidden"></div>
+  </div>
+
+  <div class="card">
+    <b>Codebook</b>
+    <dl>
+      <dt>Participant</dt><dd>Participant number, 1 to n.</dd>
+      <dt>Delivery</dt><dd>How the participant attended the program: In-person or Telehealth.</dd>
+      <dt>Sessions</dt><dd>Number of program sessions the participant attended.</dd>
+      <dt>WHO5</dt><dd>WHO-5 Well-Being Index at the end of the program, percentage score from 0 to 100. Higher scores mean better well-being.</dd>
+    </dl>
+  </div>
+</main>
+<script>
+/* Community Wellness Program data generator.
+   One source file: the web page inlines it, and the key script loads it in node,
+   so a student's dataset and the key are built from identical code.
+   Seed = student ID + exam code. Everything is integer arithmetic plus
+   Math.sqrt/Math.log/Math.cos, which are deterministic across modern engines
+   for the inputs used here; rounding is applied before output. */
+(function (root) {
+  'use strict';
+
+  function cleanId(id) { return String(id == null ? '' : id).replace(/[^0-9A-Za-z]/g, '').toUpperCase(); }
+  function cleanCode(code) { return String(code == null ? '' : code).trim().toLowerCase().replace(/\s+/g, ' '); }
+
+  // cyrb128: four 32-bit words from a string.
+  function hash128(str) {
+    let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+    for (let i = 0, k; i < str.length; i++) {
+      k = str.charCodeAt(i);
+      h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+      h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+      h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+      h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+    }
+    h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+    h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+    h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+    h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+    return [(h1 ^ h2 ^ h3 ^ h4) >>> 0, (h2 ^ h1) >>> 0, (h3 ^ h1) >>> 0, (h4 ^ h1) >>> 0];
+  }
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function makeNormal(rng) {
+    return function () {
+      let u = 0; while (u === 0) u = rng();
+      const v = rng();
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    };
+  }
+
+  function generate(id, code) {
+    const sid = cleanId(id), cd = cleanCode(code);
+    if (!sid || !cd) throw new Error('Both a student ID and the exam code are required.');
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const seed = hash128('wellness|' + sid + '|' + cd + '|' + attempt);
+      const rng = mulberry32(seed[0] ^ seed[1]);
+      const norm = makeNormal(rng);
+      const n = 40 + Math.floor(rng() * 21);            // 40 to 60
+      const pIn = 0.40 + 0.20 * rng();                  // share assigned to In-person
+      const b0 = 6 + 4 * rng();                         // raw WHO-5 (0 to 25) at zero sessions
+      const b1 = 0.5 + 1.0 * rng();                     // raw points per session
+      const delta = -2.5 + 3.0 * rng();                 // In-person minus Telehealth, raw points
+      const sigma = 3.0 + 1.5 * rng();
+      const x0 = 3 + Math.floor(rng() * 8);             // 3 to 10
+      const rows = [];
+      for (let i = 1; i <= n; i++) {
+        const inp = rng() < pIn;
+        const mu = inp ? 7.0 : 5.5;
+        let s = Math.round(mu + 2.6 * norm());
+        s = Math.max(1, Math.min(12, s));
+        let raw = b0 + b1 * s + (inp ? delta / 2 : -delta / 2) + sigma * norm();
+        raw = Math.max(0, Math.min(25, Math.round(raw)));
+        rows.push({ Participant: i, Delivery: inp ? 'In-person' : 'Telehealth', Sessions: s, WHO5: 4 * raw });
+      }
+      const nIn = rows.filter(r => r.Delivery === 'In-person').length, nTe = n - nIn;
+      const sess = rows.map(r => r.Sessions);
+      const who = rows.map(r => r.WHO5);
+      const ok = nIn >= 15 && nTe >= 15 && Math.min.apply(null, sess) <= 3 && Math.max.apply(null, sess) >= 10 &&
+        new Set(sess).size >= 7 && new Set(who).size >= 8;
+      if (!ok) continue;
+      const csv = 'Participant,Delivery,Sessions,WHO5\n' +
+        rows.map(r => r.Participant + ',' + r.Delivery + ',' + r.Sessions + ',' + r.WHO5).join('\n') + '\n';
+      const ck = hash128('check|' + sid + '|' + cd + '|' + csv)[0];
+      const check = String(1000 + (ck % 9000));
+      return { id: sid, n, x0, check, csv, rows, fileName: 'wellness_' + sid + '.csv' };
+    }
+    throw new Error('Could not generate a dataset.');
+  }
+
+  const api = { generate, cleanId, cleanCode };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.WellnessGen = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var current = null;
+  function showErr(msg){ var e=$('err'); e.textContent=msg; e.style.display='block'; }
+  function clearErr(){ $('err').style.display='none'; }
+  $('go').addEventListener('click', function(){
+    clearErr(); $('prevWrap').classList.add('hidden'); $('prevWrap').innerHTML='';
+    var id = $('sid').value, code = $('code').value;
+    if(!WellnessGen.cleanId(id)){ showErr('Enter your student ID.'); return; }
+    if(!WellnessGen.cleanCode(code)){ showErr('Enter the exam code announced in class.'); return; }
+    try { current = WellnessGen.generate(id, code); } catch(e){ showErr(e.message); return; }
+    $('outId').textContent = current.id;
+    $('outN').textContent = current.n;
+    $('outX0').textContent = current.x0;
+    $('outCheck').textContent = current.check;
+    $('result').classList.remove('hidden');
+  });
+  $('dl').addEventListener('click', function(){
+    if(!current) return;
+    var blob = new Blob([current.csv], {type:'text/csv'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = current.fileName;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  });
+  $('pv').addEventListener('click', function(){
+    if(!current) return;
+    var w = $('prevWrap');
+    if(!w.classList.contains('hidden')){ w.classList.add('hidden'); return; }
+    var rows = current.rows.slice(0,6).map(function(r){ return '<tr><td>'+r.Participant+'</td><td>'+r.Delivery+'</td><td>'+r.Sessions+'</td><td>'+r.WHO5+'</td></tr>'; }).join('');
+    w.innerHTML = '<table class="prev"><thead><tr><th>Participant</th><th>Delivery</th><th>Sessions</th><th>WHO5</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    w.classList.remove('hidden');
+  });
+  ['sid','code'].forEach(function(id){ $(id).addEventListener('keydown', function(e){ if(e.key==='Enter') $('go').click(); }); });
+})();
+</script>
+<noscript>This page needs JavaScript.</noscript>
+</body>
+</html>

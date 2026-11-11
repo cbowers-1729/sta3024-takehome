@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STA-3024 Take-Home Dataset: Simple Linear Regression</title>
+<style>
+:root{--bg:#f6f7f5;--card:#fff;--ink:#1b2321;--mute:#58655f;--line:#d8dedb;--acc:#0f6b5c;--acc-ink:#fff;--warn:#8a4b00;--warn-bg:#fff4e0;--ok-bg:#e6f3ef}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151a18;--card:#1e2522;--ink:#e8eeeb;--mute:#9db0a8;--line:#33403b;--acc:#4fb8a3;--acc-ink:#0b1210;--warn:#ffc27a;--warn-bg:#3a2a12;--ok-bg:#1b302a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:28px 16px 56px}
+h1{font-size:1.5rem;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 20px;margin-bottom:16px}
+label{display:block;font-weight:600;margin:12px 0 4px}
+input[type=text]{width:100%;padding:10px 12px;font-size:1rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+input[type=text]:focus{outline:2px solid var(--acc);outline-offset:1px}
+button{margin-top:16px;padding:11px 18px;font-size:1rem;font-weight:600;border:0;border-radius:8px;background:var(--acc);color:var(--acc-ink);cursor:pointer}
+button.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.err{margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn);display:none}
+table.facts{border-collapse:collapse;width:100%;margin-top:6px}
+table.facts td{padding:7px 8px;border-bottom:1px solid var(--line)}
+table.facts td:first-child{color:var(--mute);width:48%}
+.big{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}
+.note{background:var(--ok-bg);border-radius:8px;padding:10px 12px;margin-top:14px}
+table.prev{border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums;font-size:.92rem}
+table.prev th,table.prev td{padding:4px 10px;border-bottom:1px solid var(--line);text-align:left}
+dl{margin:8px 0 0}dt{font-weight:600;margin-top:8px}dd{margin:0;color:var(--mute)}
+#prevWrap{overflow-x:auto}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>Take-Home Dataset</h1>
+  <p class="sub">STA-3024 Intermediate Statistics, Relational Social Skill and Life Satisfaction</p>
+
+  <div class="card">
+    <label for="sid">Student ID</label>
+    <input type="text" id="sid" autocomplete="off" inputmode="text">
+    <label for="code">Exam code</label>
+    <input type="text" id="code" autocomplete="off">
+    <button id="go" type="button">Get my dataset</button>
+    <div class="err" id="err" role="alert"></div>
+  </div>
+
+  <div class="card hidden" id="result">
+    <h2 style="margin:0 0 4px;font-size:1.15rem">Your dataset</h2>
+    <p class="sub" style="margin:0">Generated for ID <b id="outId"></b>. If that is not your ID, go back and fix it before you start.</p>
+    <table class="facts">
+      <tr><td>Number of rows (n)</td><td class="big" id="outN"></td></tr>
+      <tr><td>Predict at SocialSkill =</td><td class="big" id="outX0"></td></tr>
+      <tr><td>Check code</td><td class="big" id="outCheck"></td></tr>
+    </table>
+    <div class="note"><b>Write these three numbers down on paper before you leave this page.</b> You will type the check code and the number of rows into the Canvas quiz. Type the Predict at SocialSkill value into the Statistical Analysis Tool's "Predict at X" box.</div>
+    <button id="dl" type="button">Download CSV</button>
+    <button id="pv" type="button" class="alt">Show first rows</button>
+    <div id="prevWrap" class="hidden"></div>
+  </div>
+
+  <div class="card">
+    <b>Codebook</b>
+    <dl>
+      <dt>Student</dt><dd>Student number, 1 to n.</dd>
+      <dt>SocialSkill</dt><dd>Relational social skill: the average of 30 items rated from 1 (strongly disagree) to 5 (strongly agree). Higher scores mean more social skill.</dd>
+      <dt>LifeSatisfaction</dt><dd>Satisfaction with Life Scale: the average of 5 items rated from 1 (strongly disagree) to 5 (strongly agree). Higher scores mean more satisfaction with life.</dd>
+    </dl>
+  </div>
+</main>
+<script>
+/* Relational social skill and life satisfaction data generator.
+   One source file: the web page inlines it, and the key script loads it in node,
+   so a student's dataset and the key are built from identical code.
+   Seed = student ID + exam code. A candidate dataset is kept only if the
+   Statistical Analysis Tool's influence screen (Cook's D > 4/n, or a change in
+   the decision about the slope when one observation is removed) flags 1 to 3
+   observations and none of them changes the decision, so every student gets a
+   short, readable Table 3. */
+(function (root) {
+  'use strict';
+
+  function cleanId(id) { return String(id == null ? '' : id).replace(/[^0-9A-Za-z]/g, '').toUpperCase().replace(/^0+/, ''); }   // leading zeros never matter
+  function cleanCode(code) { return String(code == null ? '' : code).trim().toLowerCase().replace(/\s+/g, ' '); }
+
+  // cyrb128: four 32-bit words from a string.
+  function hash128(str) {
+    let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+    for (let i = 0, k; i < str.length; i++) {
+      k = str.charCodeAt(i);
+      h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+      h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+      h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+      h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+    }
+    h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+    h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+    h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+    h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+    return [(h1 ^ h2 ^ h3 ^ h4) >>> 0, (h2 ^ h1) >>> 0, (h3 ^ h1) >>> 0, (h4 ^ h1) >>> 0];
+  }
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function makeNormal(rng) {
+    return function () {
+      let u = 0; while (u === 0) u = rng();
+      const v = rng();
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    };
+  }
+
+  // Two-sided p-value of a t statistic: I_{df/(df+t^2)}(df/2, 1/2).
+  function lgamma(z) {
+    const g = [676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+      12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    if (z < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * z))) - lgamma(1 - z);
+    z -= 1; let x = 0.99999999999980993;
+    for (let i = 0; i < 8; i++) x += g[i] / (z + i + 1);
+    const t = z + 7.5;
+    return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+  }
+  function betacf(a, b, x) {
+    const TINY = 1e-300; let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap;
+    if (Math.abs(d) < TINY) d = TINY; d = 1 / d; let h = d;
+    for (let m = 1; m <= 300; m++) {
+      const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+      d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY; c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY; d = 1 / d; h *= d * c;
+      aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+      d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY; c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY; d = 1 / d;
+      const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-15) break;
+    }
+    return h;
+  }
+  function ibeta(x, a, b) {
+    if (x <= 0) return 0; if (x >= 1) return 1;
+    const bt = Math.exp(lgamma(a + b) - lgamma(a) - lgamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+    return x < (a + 1) / (a + b + 2) ? bt * betacf(a, b, x) / a : 1 - bt * betacf(b, a, 1 - x) / b;
+  }
+  function pt2(t, df) { return ibeta(df / (df + t * t), df / 2, 0.5); }
+  function qt975(df) {   // t with two-sided p = .05
+    let lo = 1.9, hi = 3.5;
+    for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (pt2(m, df) > 0.05) lo = m; else hi = m; }
+    return (lo + hi) / 2;
+  }
+
+  // Least squares fit from sums, so a leave-one-out refit is O(1).
+  function fitSums(n, sx, sy, sxx, sxy, syy) {
+    const Sxx = sxx - sx * sx / n, Sxy = sxy - sx * sy / n, Syy = syy - sy * sy / n;
+    const b1 = Sxy / Sxx, b0 = (sy - b1 * sx) / n, sse = Syy - b1 * Sxy, df = n - 2;
+    const s2 = sse / df, se = Math.sqrt(s2 / Sxx), t = b1 / se;
+    return { n, b0, b1, se, t, df, s2, Sxx, Syy, Sxy, xm: sx / n, p: pt2(t, df) };
+  }
+
+  // Everything the acceptance rules need, computed the way the tool does.
+  function analyze(x, y, x0) {
+    const n = x.length; let sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
+    for (let i = 0; i < n; i++) { sx += x[i]; sy += y[i]; sxx += x[i] * x[i]; sxy += x[i] * y[i]; syy += y[i] * y[i]; }
+    const f = fitSums(n, sx, sy, sxx, sxy, syy), cut = 4 / n;
+    const D = [], ploo = [], resid = [];
+    let nflag = 0, nflip = 0;
+    for (let i = 0; i < n; i++) {
+      const e = y[i] - f.b0 - f.b1 * x[i], h = 1 / n + Math.pow(x[i] - f.xm, 2) / f.Sxx;
+      resid.push(e); D.push(e * e / (2 * f.s2) * h / Math.pow(1 - h, 2));
+      const g = fitSums(n - 1, sx - x[i], sy - y[i], sxx - x[i] * x[i], sxy - x[i] * y[i], syy - y[i] * y[i]);
+      ploo.push(g.p);
+      const flip = (f.p < 0.05) !== (g.p < 0.05);
+      if (flip) nflip++;
+      if (flip || D[i] > cut) nflag++;
+    }
+    const r = f.Sxy / Math.sqrt(f.Sxx * f.Syy), tq = qt975(f.df), zq = 1.959963984540054;
+    const zr = 0.5 * Math.log((1 + r) / (1 - r)), sz = 1 / Math.sqrt(n - 3);
+    const px = f.b0 + f.b1 * x0, lev0 = 1 / n + Math.pow(x0 - f.xm, 2) / f.Sxx;
+    const sm = Math.sqrt(f.s2 * lev0), sp = Math.sqrt(f.s2 * (1 + lev0));
+    let m3 = 0; for (const e of resid) m3 += e * e * e;
+    const sdE = Math.sqrt(resid.reduce((a, e) => a + e * e, 0) / n);
+    const D1 = Math.max(2, Math.min(8, 1 - Math.floor(Math.log10(f.se))));
+    return { fit: f, D, ploo, cut, nflag, nflip, r, skew: m3 / n / Math.pow(sdE, 3),
+      printed: [[f.b1, D1], [f.b1 - tq * f.se, D1], [f.b1 + tq * f.se, D1], [f.t, 2], [f.p, 3],
+        [r, 2], [Math.tanh(zr - zq * sz), 2], [Math.tanh(zr + zq * sz), 2], [r * r, 2],
+        [px, 2], [px - tq * sm, 2], [px + tq * sm, 2], [px - tq * sp, 2], [px + tq * sp, 2]] };
+  }
+  // True when a value sits so close to a rounding boundary at d decimals that
+  // two implementations could print it differently.
+  function nearHalf(v, d) { const s = Math.abs(v) * Math.pow(10, d); return Math.abs(s - Math.floor(s) - 0.5) < 1e-6; }
+
+  function generate(id, code) {
+    const sid = cleanId(id), cd = cleanCode(code);
+    if (!sid || !cd) throw new Error('Both a student ID and the exam code are required.');
+    for (let attempt = 0; attempt < 5000; attempt++) {
+      const seed = hash128('slr|' + sid + '|' + cd + '|' + attempt);
+      const rng = mulberry32(seed[0] ^ seed[1]);
+      const norm = makeNormal(rng);
+      const n = 60 + Math.floor(rng() * 41);                 // 60 to 100
+      const tTarget = 2.6 + 0.5 * rng();                     // keeps p near .01 at every n
+      const rho = tTarget / Math.sqrt(n - 2 + tTarget * tTarget);
+      const mx = 3.36 + 0.10 * rng(), sdx = 0.36 + 0.06 * rng();
+      const my = 3.44 + 0.10 * rng(), sdy = 0.78 + 0.10 * rng();
+      const rows = [];
+      for (let i = 1; i <= n; i++) {
+        const zx = norm(), zy = rho * zx + Math.sqrt(1 - rho * rho) * norm();
+        const sum = Math.max(30, Math.min(150, Math.round(30 * (mx + sdx * zx))));   // 30 items, 1 to 5
+        const pts = Math.max(5, Math.min(25, Math.round(5 * (my + sdy * zy))));      // 5 items, 1 to 5
+        rows.push({ Student: i, SocialSkill: (sum / 30).toFixed(2), LifeSatisfaction: (pts / 5).toFixed(1) });
+      }
+      const x = rows.map(r => Number(r.SocialSkill)), y = rows.map(r => Number(r.LifeSatisfaction));
+      const xs = x.slice().sort((a, b) => a - b);
+      const lo = Math.ceil(10 * xs[Math.floor(0.10 * n)]), hi = Math.floor(10 * xs[Math.floor(0.90 * n)]);
+      if (hi <= lo) continue;
+      let k = lo + Math.floor(rng() * (hi - lo + 1));
+      if (k % 10 === 0) k = (k < hi) ? k + 1 : k - 1;       // one decimal shows, e.g. 3.2 rather than 3
+      const x0 = k / 10;
+      const A = analyze(x, y, x0);
+      const ceil = y.filter(v => v === 5).length, floor = y.filter(v => v === 1).length;
+      const ok = A.nflag >= 1 && A.nflag <= 3 && A.nflip === 0 &&
+        A.fit.p >= 0.0015 && A.fit.p <= 0.03 &&
+        A.ploo.every(p => p <= 0.04) &&
+        A.D.every(d => Math.abs(d / A.cut - 1) > 0.03) &&     // no Cook's D on the 4/n line
+        Math.abs(A.skew) < 0.5 && ceil <= 0.08 * n && floor <= 0.03 * n &&
+        new Set(x).size >= 15 && new Set(y).size >= 12 &&
+        !A.printed.some(([v, d]) => nearHalf(v, d));
+      if (!ok) continue;
+      const csv = 'Student,SocialSkill,LifeSatisfaction\n' +
+        rows.map(r => r.Student + ',' + r.SocialSkill + ',' + r.LifeSatisfaction).join('\n') + '\n';
+      const ck = hash128('check|' + sid + '|' + cd + '|' + csv)[0];
+      const check = String(1000 + (ck % 9000));
+      return { id: sid, n, x0, check, csv, rows, attempt, fileName: 'socialskill_' + sid + '.csv' };
+    }
+    throw new Error('Could not generate a dataset.');
+  }
+
+  const api = { generate, cleanId, cleanCode };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.SlrGen = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var current = null;
+  function showErr(msg){ var e=$('err'); e.textContent=msg; e.style.display='block'; }
+  function clearErr(){ $('err').style.display='none'; }
+  $('go').addEventListener('click', function(){
+    clearErr(); $('prevWrap').classList.add('hidden'); $('prevWrap').innerHTML='';
+    var id = $('sid').value, code = $('code').value;
+    if(!SlrGen.cleanId(id)){ showErr('Enter your student ID.'); return; }
+    if(!SlrGen.cleanCode(code)){ showErr('Enter the exam code announced in class.'); return; }
+    try { current = SlrGen.generate(id, code); } catch(e){ showErr(e.message); return; }
+    $('outId').textContent = id.trim();
+    $('outN').textContent = current.n;
+    $('outX0').textContent = current.x0;
+    $('outCheck').textContent = current.check;
+    $('result').classList.remove('hidden');
+  });
+  $('dl').addEventListener('click', function(){
+    if(!current) return;
+    var blob = new Blob([current.csv], {type:'text/csv'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = current.fileName;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  });
+  $('pv').addEventListener('click', function(){
+    if(!current) return;
+    var w = $('prevWrap');
+    if(!w.classList.contains('hidden')){ w.classList.add('hidden'); return; }
+    var rows = current.rows.slice(0,6).map(function(r){ return '<tr><td>'+r.Student+'</td><td>'+r.SocialSkill+'</td><td>'+r.LifeSatisfaction+'</td></tr>'; }).join('');
+    w.innerHTML = '<table class="prev"><thead><tr><th>Student</th><th>SocialSkill</th><th>LifeSatisfaction</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    w.classList.remove('hidden');
+  });
+  ['sid','code'].forEach(function(id){ $(id).addEventListener('keydown', function(e){ if(e.key==='Enter') $('go').click(); }); });
+})();
+</script>
+<noscript>This page needs JavaScript.</noscript>
+</body>
+</html>

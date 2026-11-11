@@ -77,7 +77,8 @@ dl{margin:8px 0 0}dt{font-weight:600;margin-top:8px}dd{margin:0;color:var(--mute
    Statistical Analysis Tool's influence screen (Cook's D > 4/n, or a change in
    the decision about the slope when one observation is removed) flags 1 to 3
    observations and none of them changes the decision, so every student gets a
-   short, readable Table 3. */
+   short, readable Table 3, and only if one observation has the largest Cook's D
+   as Table 3 prints it. */
 (function (root) {
   'use strict';
 
@@ -190,6 +191,14 @@ dl{margin:8px 0 0}dt{font-weight:600;margin-top:8px}dd{margin:0;color:var(--mute
   // two implementations could print it differently.
   function nearHalf(v, d) { const s = Math.abs(v) * Math.pow(10, d); return Math.abs(s - Math.floor(s) - 0.5) < 1e-6; }
 
+  // Table 3 prints Cook's D to three decimals. The largest must print differently from
+  // the next largest (so "the observation with the largest Cook's D" has one answer),
+  // and neither may sit on a rounding boundary.
+  function uniqueLargest(D) {
+    const s = D.slice().sort((a, b) => b - a);
+    return s[0].toFixed(3) !== s[1].toFixed(3) && !nearHalf(s[0], 3) && !nearHalf(s[1], 3);
+  }
+
   function generate(id, code) {
     const sid = cleanId(id), cd = cleanCode(code);
     if (!sid || !cd) throw new Error('Both a student ID and the exam code are required.');
@@ -222,6 +231,7 @@ dl{margin:8px 0 0}dt{font-weight:600;margin-top:8px}dd{margin:0;color:var(--mute
         A.fit.p >= 0.0015 && A.fit.p <= 0.03 &&
         A.ploo.every(p => p <= 0.04) &&
         A.D.every(d => Math.abs(d / A.cut - 1) > 0.03) &&     // no Cook's D on the 4/n line
+        uniqueLargest(A.D) &&                                  // one largest Cook's D in Table 3
         Math.abs(A.skew) < 0.5 && ceil <= 0.08 * n && floor <= 0.03 * n &&
         new Set(x).size >= 15 && new Set(y).size >= 12 &&
         !A.printed.some(([v, d]) => nearHalf(v, d));
